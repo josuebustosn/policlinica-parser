@@ -210,10 +210,16 @@ def main():
             print(f"  Muy pocas imágenes para video, saltando")
             continue
 
-        # Create video
+        # Create video - use lower FPS for series with few images so they're visible
+        if len(downloaded) <= 5:
+            fps = 0.5  # 2 seconds per frame for very short series
+        elif len(downloaded) <= 20:
+            fps = 2
+        else:
+            fps = 12
         video_name = sanitize_filename(f"tomografia_{info['number']}_{info['description']}")
         video_path = OUTPUT_DIR / f"{video_name}.mp4"
-        create_video(series_dir, video_path, fps=12)
+        create_video(series_dir, video_path, fps=fps)
 
     print(f"\n=== Proceso completado ===")
     print(f"Los archivos están en: {OUTPUT_DIR}")
