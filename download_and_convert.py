@@ -132,15 +132,30 @@ def sanitize_filename(name):
     return "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in str(name)).strip()
 
 
-def create_video(frames_dir, output_path, fps=15):
+def create_video(frames_dir, output_path, fps=15, num_frames=0):
     """Create MP4 video from frame images using ffmpeg."""
+    import tempfile
+    import shutil
     print(f"  Generando video: {output_path}")
 
-    # Use ffmpeg with the frame images
+    input_dir = frames_dir
+    temp_dir = None
+
+    # For series with few images, duplicate frames so each is visible for 2 seconds
+    if num_frames > 0 and num_frames <= 5:
+        temp_dir = Path(tempfile.mkdtemp())
+        repeats = max(1, int(fps * 2))  # 2 seconds per frame
+        idx = 0
+        for f in sorted(frames_dir.glob("frame_*.jpg")):
+            for _ in range(repeats):
+                shutil.copy(f, temp_dir / f"frame_{idx:04d}.jpg")
+                idx += 1
+        input_dir = temp_dir
+
     cmd = [
         "ffmpeg", "-y",
         "-framerate", str(fps),
-        "-i", str(frames_dir / "frame_%04d.jpg"),
+        "-i", str(input_dir / "frame_%04d.jpg"),
         "-c:v", "libx264",
         "-preset", "slow",
         "-crf", "18",
@@ -151,6 +166,10 @@ def create_video(frames_dir, output_path, fps=15):
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if temp_dir:
+        shutil.rmtree(temp_dir)
+
     if result.returncode != 0:
         print(f"  Error ffmpeg: {result.stderr[-500:]}")
         return False
@@ -210,16 +229,10 @@ def main():
             print(f"  Muy pocas imágenes para video, saltando")
             continue
 
-        # Create video - use lower FPS for series with few images so they're visible
-        if len(downloaded) <= 5:
-            fps = 0.5  # 2 seconds per frame for very short series
-        elif len(downloaded) <= 20:
-            fps = 2
-        else:
-            fps = 12
+        # Create video
         video_name = sanitize_filename(f"tomografia_{info['number']}_{info['description']}")
         video_path = OUTPUT_DIR / f"{video_name}.mp4"
-        create_video(series_dir, video_path, fps=fps)
+        create_video(series_dir, video_path, fps=12, num_frames=len(downloaded))
 
     print(f"\n=== Proceso completado ===")
     print(f"Los archivos están en: {OUTPUT_DIR}")
